@@ -75,6 +75,8 @@ import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.security.Constraint;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
+import org.keycloak.adapters.jetty.KeycloakJettyAuthenticator;
+import org.keycloak.representations.adapters.config.AdapterConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -429,6 +431,9 @@ public abstract class WebServerTask extends AbstractTask implements Registration
         case "form":
           securityHandler = configureForm(appConf, server, auth);
           break;
+        case "keycloak":
+          securityHandler = configureKeycloak(appConf, server, auth);
+          break;
         default:
           throw new RuntimeException(Utils.format("Invalid authentication mode '{}', must be one of '{}'",
               auth, AUTHENTICATION_MODES));
@@ -587,6 +592,23 @@ public abstract class WebServerTask extends AbstractTask implements Registration
 
     FormAuthenticator authenticator = new FormAuthenticator("/login.html", "/login.html?error=true", true);
     securityHandler.setAuthenticator(injectActivationCheck(new ProxyAuthenticator(authenticator, runtimeInfo, conf)));
+    return securityHandler;
+  }
+
+  private ConstraintSecurityHandler configureKeycloak(Configuration conf, Server server, String mode) {
+    ConstraintSecurityHandler securityHandler = new ConstraintSecurityHandler();
+
+    KeycloakJettyAuthenticator authenticator = new KeycloakJettyAuthenticator();
+    //TODO get settings from main config or from a config file
+    AdapterConfig adapterConfig = new AdapterConfig();
+    adapterConfig.setRealm("sdc");
+    adapterConfig.setAuthServerUrl("192.168.1.1");
+    adapterConfig.setSslRequired("external");
+    authenticator.setAdapterConfig(adapterConfig);
+    authenticator.initializeKeycloak();
+
+    securityHandler.setAuthenticator(authenticator);
+
     return securityHandler;
   }
 
