@@ -32,7 +32,6 @@ import com.streamsets.lib.security.RegistrationResponseJson;
 import com.streamsets.lib.security.http.DisconnectedSSOManager;
 import com.streamsets.lib.security.http.DisconnectedSSOService;
 import com.streamsets.lib.security.http.FailoverSSOService;
-import com.streamsets.lib.security.http.KeycloakSSOUserAuthenticator;
 import com.streamsets.lib.security.http.LimitedMethodServer;
 import com.streamsets.lib.security.http.ProxySSOService;
 import com.streamsets.lib.security.http.RegistrationResponseDelegate;
@@ -78,6 +77,8 @@ import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.security.Constraint;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
+import org.keycloak.adapters.jetty.KeycloakJettyAuthenticator;
+import org.keycloak.representations.adapters.config.AdapterConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -176,9 +177,7 @@ public abstract class WebServerTask extends AbstractTask implements Registration
   public static final String LDAP = "ldap";
   public static final String LDAP_LOGIN_MODULE_NAME = "ldap.login.module.name";
 
-  public static final String SSO = "sso";
-
-  public static final Set<String> LOGIN_MODULES = ImmutableSet.of(FILE, LDAP, SSO);
+  public static final Set<String> LOGIN_MODULES = ImmutableSet.of(FILE, LDAP);
 
   public static final String SSO_SERVICES_ATTR = "ssoServices";
 
@@ -442,7 +441,7 @@ public abstract class WebServerTask extends AbstractTask implements Registration
       securityHandler = configureSSO(appConf, appHandler, appContext);
     } else if (isKeycloakEnabled()) {
       LOG.info("Keycloak SSO Enabled");
-      securityHandler = configureKeycloakSSO(appConf, appHandler, appContext);
+      securityHandler = configureKeycloakSSO();
     } else {
       switch (auth) {
         case "none":
@@ -591,22 +590,23 @@ public abstract class WebServerTask extends AbstractTask implements Registration
   }
 
   @SuppressWarnings("unchecked")
-  private ConstraintSecurityHandler configureKeycloakSSO(
-      final Configuration appConf, ServletContextHandler appHandler, final String appContext
-  ) {
+  private ConstraintSecurityHandler configureKeycloakSSO() {
     ConstraintSecurityHandler security = new ConstraintSecurityHandler();
-    KeycloakSsoLoginService ssoService = new KeycloakSsoLoginService();
-    SSOService proxySsoService = new ProxySSOService(ssoService);
 
-    // registering ssoService with runtime, to enable cache flushing
-    ((List)getRuntimeInfo().getAttribute(SSO_SERVICES_ATTR)).add(proxySsoService);
-    appHandler.getServletContext().setAttribute(SSOService.SSO_SERVICE_KEY, proxySsoService);
-    security.setAuthenticator(injectActivationCheck(new KeycloakSSOUserAuthenticator(
-        appContext,
-        ssoService,
-        appConf,
-        runtimeInfo.getProductName()
-    )));
+    KeycloakJettyAuthenticator authenticator = new KeycloakJettyAuthenticator();
+    AdapterConfig adapterConfig = new AdapterConfig();
+    adapterConfig.setRealm(conf.get("keycloak.realm", "default_realm"));
+    adapterConfig.setResource(conf.get("keycloak.resource", "client"));
+    adapterConfig.setAuthServerUrl(conf.get("keycloak.authurl", "http://localhost/auth"));
+    adapterConfig.setSslRequired(conf.get("keycloak.sslrequired", "external"));
+    String cred = conf.get("keycloak.client.credential", "<credential>");
+    adapterConfig.setCredentials(Collections.singletonMap("secret", cred));
+    adapterConfig.setPrincipalAttribute(conf.get("keycloak.username.attribute", "preferred_username"));
+
+    authenticator.setAdapterConfig(adapterConfig);
+    authenticator.initializeKeycloak();
+    security.setAuthenticator(authenticator);
+
     return security;
   }
 
