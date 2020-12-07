@@ -419,6 +419,9 @@ public abstract class WebServerTask extends AbstractTask implements Registration
     boolean isDPMEnabled = runtimeInfo.isDPMEnabled();
     if (isDPMEnabled && !runtimeInfo.isRemoteSsoDisabled()) {
       securityHandler = configureSSO(appConf, appHandler, appContext);
+    } else if (isKeycloakEnabled()) {
+      LOG.info("Keycloak SSO Enabled");
+      securityHandler = configureKeycloakSSO();
     } else {
       switch (auth) {
         case "none":
@@ -430,9 +433,6 @@ public abstract class WebServerTask extends AbstractTask implements Registration
           break;
         case "form":
           securityHandler = configureForm(appConf, server, auth);
-          break;
-        case "keycloak":
-          securityHandler = configureKeycloak(appConf, server, auth);
           break;
         default:
           throw new RuntimeException(Utils.format("Invalid authentication mode '{}', must be one of '{}'",
@@ -548,6 +548,27 @@ public abstract class WebServerTask extends AbstractTask implements Registration
     ((List)getRuntimeInfo().getAttribute(SSO_SERVICES_ATTR)).add(proxySsoService);
     appHandler.getServletContext().setAttribute(SSOService.SSO_SERVICE_KEY, proxySsoService);
     security.setAuthenticator(injectActivationCheck(new SSOAuthenticator(appContext, proxySsoService, appConf)));
+    return security;
+  }
+
+  @SuppressWarnings("unchecked")
+  private ConstraintSecurityHandler configureKeycloakSSO() {
+    ConstraintSecurityHandler security = new ConstraintSecurityHandler();
+
+    KeycloakJettyAuthenticator authenticator = new KeycloakJettyAuthenticator();
+    AdapterConfig adapterConfig = new AdapterConfig();
+    adapterConfig.setRealm(conf.get("keycloak.realm", "default_realm"));
+    adapterConfig.setResource(conf.get("keycloak.resource", "client"));
+    adapterConfig.setAuthServerUrl(conf.get("keycloak.authurl", "http://localhost/auth"));
+    adapterConfig.setSslRequired(conf.get("keycloak.sslrequired", "external"));
+    String cred = conf.get("keycloak.client.credential", "<credential>");
+    adapterConfig.setCredentials(Collections.singletonMap("secret", cred));
+    adapterConfig.setPrincipalAttribute(conf.get("keycloak.username.attribute", "preferred_username"));
+
+    authenticator.setAdapterConfig(adapterConfig);
+    authenticator.initializeKeycloak();
+    security.setAuthenticator(authenticator);
+
     return security;
   }
 
@@ -1032,5 +1053,9 @@ public abstract class WebServerTask extends AbstractTask implements Registration
   @VisibleForTesting
   HttpConfiguration getHttpConf() {
     return httpConf;
+  }
+
+  private boolean isKeycloakEnabled() {
+    return conf.get("keycloak.enabled", false);
   }
 }

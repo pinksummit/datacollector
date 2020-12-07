@@ -113,6 +113,12 @@
       <groupId>org.keycloak</groupId>
       <artifactId>keycloak-jetty94-adapter</artifactId>
       <version>11.0.3</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.bouncycastle</groupId>
+          <artifactId>bcprov-jdk15on</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>com.squareup.dagger</groupId>
