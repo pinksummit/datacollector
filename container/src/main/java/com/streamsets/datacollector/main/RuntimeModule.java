@@ -132,6 +132,8 @@ public class RuntimeModule {
         return new FileUserGroupManager(usersManager);
       case WebServerTask.LDAP:
         return new LdapUserGroupManager();
+      case WebServerTask.SSO:
+        return new SsoUserGroupManager();
       default:
         throw new RuntimeException(Utils.format("Invalid Authentication Login Module '{}', must be one of '{}'",
             loginModule, WebServerTask.LOGIN_MODULES));

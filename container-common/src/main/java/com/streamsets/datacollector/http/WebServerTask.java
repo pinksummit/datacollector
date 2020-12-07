@@ -32,6 +32,7 @@ import com.streamsets.lib.security.RegistrationResponseJson;
 import com.streamsets.lib.security.http.DisconnectedSSOManager;
 import com.streamsets.lib.security.http.DisconnectedSSOService;
 import com.streamsets.lib.security.http.FailoverSSOService;
+import com.streamsets.lib.security.http.KeycloakSSOUserAuthenticator;
 import com.streamsets.lib.security.http.LimitedMethodServer;
 import com.streamsets.lib.security.http.ProxySSOService;
 import com.streamsets.lib.security.http.RegistrationResponseDelegate;
@@ -175,7 +176,9 @@ public abstract class WebServerTask extends AbstractTask implements Registration
   public static final String LDAP = "ldap";
   public static final String LDAP_LOGIN_MODULE_NAME = "ldap.login.module.name";
 
-  public static final Set<String> LOGIN_MODULES = ImmutableSet.of(FILE, LDAP);
+  public static final String SSO = "sso";
+
+  public static final Set<String> LOGIN_MODULES = ImmutableSet.of(FILE, LDAP, SSO);
 
   public static final String SSO_SERVICES_ATTR = "ssoServices";
 
@@ -437,6 +440,9 @@ public abstract class WebServerTask extends AbstractTask implements Registration
     boolean isDPMEnabled = runtimeInfo.isDPMEnabled();
     if (isDPMEnabled && !runtimeInfo.isRemoteSsoDisabled()) {
       securityHandler = configureSSO(appConf, appHandler, appContext);
+    } else if (isKeycloakEnabled()) {
+      LOG.info("Keycloak SSO Enabled");
+      securityHandler = configureKeycloakSSO(appConf, appHandler, appContext);
     } else {
       switch (auth) {
         case "none":
@@ -578,6 +584,26 @@ public abstract class WebServerTask extends AbstractTask implements Registration
     security.setAuthenticator(injectActivationCheck(new SSOAuthenticator(
         appContext,
         proxySsoService,
+        appConf,
+        runtimeInfo.getProductName()
+    )));
+    return security;
+  }
+
+  @SuppressWarnings("unchecked")
+  private ConstraintSecurityHandler configureKeycloakSSO(
+      final Configuration appConf, ServletContextHandler appHandler, final String appContext
+  ) {
+    ConstraintSecurityHandler security = new ConstraintSecurityHandler();
+    KeycloakSsoLoginService ssoService = new KeycloakSsoLoginService();
+    SSOService proxySsoService = new ProxySSOService(ssoService);
+
+    // registering ssoService with runtime, to enable cache flushing
+    ((List)getRuntimeInfo().getAttribute(SSO_SERVICES_ATTR)).add(proxySsoService);
+    appHandler.getServletContext().setAttribute(SSOService.SSO_SERVICE_KEY, proxySsoService);
+    security.setAuthenticator(injectActivationCheck(new KeycloakSSOUserAuthenticator(
+        appContext,
+        ssoService,
         appConf,
         runtimeInfo.getProductName()
     )));
@@ -1093,5 +1119,9 @@ public abstract class WebServerTask extends AbstractTask implements Registration
   @VisibleForTesting
   HttpConfiguration getHttpConf() {
     return httpConf;
+  }
+
+  private boolean isKeycloakEnabled() {
+    return conf.get("keycloak.enabled", false);
   }
 }

@@ -82,6 +82,8 @@ public class DataCollectorWebServerTask extends WebServerTask {
       this.userGroupManager.setLoginService(loginService);
     } else if (loginModule.equals(LDAP)) {
       this.userGroupManager.setRoleMapping(roleMapping);
+    } else if (loginModule.equals(SSO)) {
+      this.userGroupManager.setRoleMapping(roleMapping);
     }
     return loginService;
   }
