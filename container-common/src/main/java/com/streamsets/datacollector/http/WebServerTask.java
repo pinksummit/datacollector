@@ -563,6 +563,12 @@ public abstract class WebServerTask extends AbstractTask implements Registration
     adapterConfig.setSslRequired(conf.get("keycloak.sslrequired", "external"));
     String cred = conf.get("keycloak.client.credential", "<credential>");
     adapterConfig.setCredentials(Collections.singletonMap("secret", cred));
+    String baseUri = conf.get("keycloak.baseuri", "/");
+    if (baseUri.length() > 1) {
+      Map<String, String> redirectRules = Collections.singletonMap("/", baseUri);
+      adapterConfig.setRedirectRewriteRules(redirectRules);
+    }
+
     adapterConfig.setPrincipalAttribute(conf.get("keycloak.username.attribute", "preferred_username"));
 
     authenticator.setAdapterConfig(adapterConfig);
